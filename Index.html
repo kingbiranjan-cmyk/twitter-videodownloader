@@ -1,0 +1,108 @@
+<?php
+// Twitter API credentials - REPLACE THESE WITH YOUR OWN
+$consumer_key = 'YOUR_CONSUMER_KEY';
+$consumer_key_secret = 'YOUR_CONSUMER_KEY_SECRET';
+$access_token = 'YOUR_ACCESS_TOKEN';
+$access_token_secret = 'YOUR_ACCESS_TOKEN_SECRET';
+
+// Include TwitterOAuth library (download from https://github.com/abraham/twitteroauth)
+require_once 'twitteroauth/autoload.php';
+use Abraham\TwitterOAuth\TwitterOAuth;
+
+$video_url = '';
+$error = '';
+$success = '';
+
+if ($_POST['tweet_url']) {
+    $url = $_POST['tweet_url'];
+    
+    // Extract tweet ID from URL (e.g., https://twitter.com/user/status/123456789)
+    if (preg_match('/\/status\/(\d+)/', $url, $matches)) {
+        $tweet_id = $matches[1];
+        
+        // Connect to Twitter API
+        $connection = new TwitterOAuth($consumer_key, $consumer_key_secret, $access_token, $access_token_secret);
+        $connection->setApiVersion('2'); // For v2 API
+        
+        // Get tweet with extended entities
+        $tweet = $connection->get("tweets/" . $tweet_id, ["tweet.fields" => "attachments,public_metrics", "expansions" => "attachments.media_keys", "media.fields" => "variants,duration_ms"]);
+        
+        if (!empty($tweet->data) && !empty($tweet->includes->media)) {
+            $media = $tweet->includes->media[0];
+            if (isset($media->variants)) {
+                // Get highest bitrate MP4
+                usort($media->variants, function($a, $b) {
+                    return ($b->bitrate ?? 0) - ($a->bitrate ?? 0);
+                });
+                foreach ($media->variants as $variant) {
+                    if (strpos($variant->content_type, 'video/mp4') !== false) {
+                        $video_url = $variant->url;
+                        break;
+                    }
+                }
+                if ($video_url) {
+                    $success = "वीडियो URL मिल गया! डाउनलोड करें: <a href='$video_url' download>डाउनलोड MP4</a>";
+                } else {
+                    $error = "कोई MP4 वीडियो नहीं मिला।";
+                }
+            } else {
+                $error = "इस ट्वीट में वीडियो नहीं है।";
+            }
+        } else {
+            $error = "ट्वीट नहीं मिला या API एरर। चेक करें URL।";
+        }
+    } else {
+        $error = "वैलिड Twitter URL दें (जैसे https://twitter.com/user/status/123456)。";
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitter Video Downloader - PHP टूल</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white text-center">
+                        <h3>Twitter Video Downloader</h3>
+                        <p class="mb-0">Twitter से वीडियो डाउनलोड करें</p>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="mb-3">
+                                <label class="form-label">Twitter Tweet URL पेस्ट करें:</label>
+                                <input type="url" class="form-control" name="tweet_url" placeholder="https://twitter.com/username/status/123456789" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">डाउनलोड लिंक जनरेट करें</button>
+                        </form>
+                        
+                        <?php if ($error): ?>
+                            <div class="alert alert-danger mt-3"><?php echo $error; ?></div>
+                        <?php endif; ?>
+                        
+                        <?php if ($success): ?>
+                            <div class="alert alert-success mt-3"><?php echo $success; ?></div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                
+                <div class="card mt-3">
+                    <div class="card-body text-center">
+                        <p><strong>नोट:</strong> API कीज़ सेट करें ऊपर कोड में। अगर एरर आए तो Twitter Developer से चेक करें।</p>
+                        <p>सोर्स: <a href="https://github.com/mahirozdin/Twitter-Video-Downloader" target="_blank">GitHub Repo</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
